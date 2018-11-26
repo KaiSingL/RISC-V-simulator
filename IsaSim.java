@@ -28,17 +28,19 @@ public class IsaSim {
 
     static int pc;
     static int reg[] = new int[32];
-    static byte data[] = new byte[3000000];// memory = data[] + prog[]
+    // memory = data[] + instructions[]
+    static byte data[] = new byte[3000000];
     static int instructions[] = {};
-    static Stack stack = new Stack();
+    // static Stack stack = new Stack();
 
     public static void log(Object thing) {
         System.out.println(String.valueOf(thing));
     }
 
     public static String decToHex(int dec) {
-        return Integer.toHexString(dec); // this turn decimal to hex, only
+        // this turn decimal to hex, only
         // used in default case
+        return Integer.toHexString(dec);
     }
 
     public static int getUnsignedInt(int x) {
@@ -46,12 +48,6 @@ public class IsaSim {
         System.out.println("unsigned int: " + (x & 0xffffffff));
         return (x & 0xffffffff);
     }
-
-    // public static byte[] intToByteArray(int a) {
-    // return new byte[] { (byte) ((a >> 24) & 0xFF), (byte) ((a >> 16) & 0xFF),
-    // (byte) ((a >> 8) & 0xFF),
-    // (byte) (a & 0xFF) };
-    // }
 
     public static byte[] intTo4Byte(int i) {
         // this disect int into byte[4]
@@ -75,14 +71,11 @@ public class IsaSim {
         return result;
     }
 
-    public static int[] convert(byte buf[]) {// this convert byte [] to int []
+    public static int[] convert(byte buf[]) {
+        // this convert byte [] to int []
         int intArr[] = new int[buf.length / 4];
         int offset = 0;
         for (int i = 0; i < intArr.length; i++) {
-            // intArr[i] = (buf[3 + offset] & 0xFF) | ((buf[2 + offset] & 0xFF) << 8) |
-            // ((buf[1 + offset] & 0xFF) << 16)
-            // | ((buf[0 + offset] & 0xFF) << 24);
-            // offset += 4;
             intArr[i] = ((buf[3 + offset] & 0xFF) << 24) | ((buf[2 + offset] & 0xFF) << 16)
                     | ((buf[1 + offset] & 0xFF) << 8) | ((buf[0 + offset] & 0xFF));
             offset += 4;
@@ -132,19 +125,19 @@ public class IsaSim {
         System.out.println("Hello RISC-V World!");
         Scanner scanner = new Scanner(System.in);
         System.out.println("Enter your filename without file extension: ");
-        fileName = scanner.nextLine();
+        // fileName = scanner.nextLine();
+        fileName = "loop";
         INPUT_FILE_NAME = fileName + ".bin";
         OUTPUT_FILE_NAME = fileName + "_copy.res";
         scanner.close();
 
-        pc = 0;
-        // reg[0] = 0;
         SmallBinaryFiles binary = new SmallBinaryFiles();
         byte[] bytes = binary.readSmallBinaryFile(INPUT_FILE_NAME);
         log("Name of file: " + INPUT_FILE_NAME);
         log("Small - size of file read in:" + bytes.length);
         instructions = convert(bytes);
 
+        pc = 0;
         for (;;) {
             int instr = instructions[pc];
             int opcode = instr & 0x7f;
@@ -153,16 +146,23 @@ public class IsaSim {
             int rs1 = (instr >> 15) & 0x01f;
             int rs2 = (instr >> 20) & 0x01f;
             int imm = (instr >>> 25);
-            int I_imm = (rs2 | (imm << 5)); // for I-type
+            // Imm for each type:
+            // for I-type
+            int I_imm = (rs2 | (imm << 5));
             I_imm = ((I_imm << 20) >> 20);
+            // for U-type
             int U_imm = (funct3 | (rs1 << 5) | (rs2 << 8) | (imm << 13));
+            // for S-type
             int S_imm = rd | ((imm & 0x7f) << 5);
             S_imm = ((S_imm << 20) >> 20);
+            // for B-type
             int B_imm = (rd >> 1) & 0xf | ((imm & 0x3f) << 4) | ((rd & 0x1) << 10) | ((imm >> 6) << 11);
             B_imm = ((B_imm << 20) >> 20) / 2;
+            // for J-type
+            // 7,5,5,3 => 20,10:1,11,19:12 =>7, 6:1,5:2,1,5,3
             int J_imm = (rs2 >>> 1) | (imm & 0x3f) << 4 | ((rs2 & 0x1) << 10) | (funct3 & 0x7) << 11 | (rs1 << 14)
-                    | (imm >>> 6) << 19;// 7,5,5,3 => 20,10:1,11,19:12 =>7, 6:1,5:2,1,5,3
-            J_imm = J_imm / 2;
+                    | (imm >>> 6) << 19;
+            J_imm = ((J_imm << 12) >> 12) / 2;
 
             System.out.println("instr: 0x" + decToHex(instr) + " ");
             System.out.println("opcode: 0x" + decToHex(opcode) + " ");
@@ -175,11 +175,6 @@ public class IsaSim {
             switch (opcode) {
             // fence, fence.i, ebreak, csrrw, csrrs, csrrc, csrrwi,
             // csrrsi, csrrci can be ignored
-
-            case 0x0: // template
-                switch (funct3) {
-                }
-                break;
 
             case 0x37: // LUI load upper immediate (20bits)
                 System.out.println("U_imm: " + (U_imm << 12));
@@ -201,11 +196,11 @@ public class IsaSim {
                 break;
 
             case 0x67: // JALR
-                System.out.println("J_imm: " + J_imm);
+                System.out.println("I_imm: " + I_imm);
                 System.out.println("reg[rs1]: " + reg[rs1]);
                 System.out.println("pc: " + pc);
                 reg[rd] = pc + 1;
-                pc = reg[rs1] + J_imm - 1;
+                pc = reg[rs1] + I_imm - 1;
                 System.out.println("pc: " + pc);
                 break;
 
@@ -281,18 +276,18 @@ public class IsaSim {
                     break;
 
                 case 0b010: // LW
-                    if (rs1 == 2) {
-                        reg[rd] = (Integer) stack.pop();
-                    } else {
-                        b[0] = data[reg[rs1] + I_imm];
-                        b[1] = data[reg[rs1] + I_imm + 1];
-                        b[2] = data[reg[rs1] + I_imm + 2];
-                        b[3] = data[reg[rs1] + I_imm + 3];
-                        reg[rd] = byteToInt(b);
-                        if ((b[3] >> 7) == 1) {
-                            reg[rd] = reg[rd] * -1;
-                        }
-                    }
+                    // if (rs1 == 2) {
+                    // reg[rd] = (Integer) stack.pop();
+                    // } else {
+                    b[0] = data[reg[rs1] + I_imm];
+                    b[1] = data[reg[rs1] + I_imm + 1];
+                    b[2] = data[reg[rs1] + I_imm + 2];
+                    b[3] = data[reg[rs1] + I_imm + 3];
+                    reg[rd] = byteToInt(b);
+                    // if ((b[3] >> 7) == 1) {
+                    //     reg[rd] = reg[rd] * -1;
+                    // }
+                    // }
                     break;
 
                 case 0b100: // LBU
@@ -328,15 +323,15 @@ public class IsaSim {
                     data[reg[rs1] + S_imm + 1] = temp[3];
                     break;
                 case 0b010: // SW
-                    if (rs1 == 2) {
-                        stack.push(reg[rs2]);
-                    } else {
-                        temp = intTo4Byte(reg[rs2]);
-                        data[reg[rs1] + S_imm] = temp[0];
-                        data[reg[rs1] + S_imm + 1] = temp[1];
-                        data[reg[rs1] + S_imm + 2] = temp[2];
-                        data[reg[rs1] + S_imm + 3] = temp[3];
-                    }
+                    // if (rs1 == 2) {
+                    // stack.push(reg[rs2]);
+                    // } else {
+                    temp = intTo4Byte(reg[rs2]);
+                    data[reg[rs1] + S_imm] = temp[0];
+                    data[reg[rs1] + S_imm + 1] = temp[1];
+                    data[reg[rs1] + S_imm + 2] = temp[2];
+                    data[reg[rs1] + S_imm + 3] = temp[3];
+                    // }
                 }
                 break;
 
@@ -376,9 +371,6 @@ public class IsaSim {
                     if (imm != 0) { // SRL
                         reg[rd] = reg[rs1] >> I_imm;
                     } else { // SRA
-                        // as far as I know,
-                        // shifting in java keep the sign,
-                        // need checking
                         reg[rd] = reg[rs1] >> I_imm;
                         reg[rd] = (reg[rd] & 0xffffffff);
                     }
@@ -415,9 +407,6 @@ public class IsaSim {
                     if (imm != 0) { // SRL
                         reg[rd] = reg[rs1] >> reg[rs2];
                     } else { // SRA
-                        // as far as I know,
-                        // shifting in java keep the sign,
-                        // need checking
                         reg[rd] = reg[rs1] >> reg[rs2];
                         reg[rd] = (reg[rd] & 0xffffffff);
                     }
@@ -451,10 +440,9 @@ public class IsaSim {
                 break;
             }
             reg[0] = 0;
-            ++pc; // We count in 4 byte words
+            ++pc; // We count in 4 byte words, so +1 for int
 
             for (int i = 0; i < reg.length; ++i) {
-                // System.out.print(decToHex(reg[i]) + " ");
                 System.out.print(i + ":" + reg[i] + " ");
             }
             System.out.println();
